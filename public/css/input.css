@@ -19,3 +19,8 @@ body {
   background-color: var(--color-cream);
   color: var(--color-text-primary);
 }
+
+.test {
+  background-color: var(--color-rose-primary);
+  color: var(--color-cream);
+}
