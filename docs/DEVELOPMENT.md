@@ -119,10 +119,10 @@
 | `FRONTEND_URL` | CORS 允許來源 | 選填 | `http://localhost:5173` |
 | `ADMIN_EMAIL` | seed 管理員帳號 | 選填 | `admin@hexschool.com` |
 | `ADMIN_PASSWORD` | seed 管理員密碼 | 選填 | `12345678` |
-| `ECPAY_MERCHANT_ID` | ECPay 商店代號預留 | 目前未使用 | `3002607` |
-| `ECPAY_HASH_KEY` | ECPay hash key 預留 | 目前未使用 | `pwFHCqoQZGmho4w6` |
-| `ECPAY_HASH_IV` | ECPay hash iv 預留 | 目前未使用 | `EkRm7iFT261dpevs` |
-| `ECPAY_ENV` | 金流環境預留 | 目前未使用 | `staging` |
+| `ECPAY_MERCHANT_ID` | ECPay 商店代號 | 綠界 AIO 建單與查詢使用 | `3002607` |
+| `ECPAY_HASH_KEY` | ECPay hash key | 綠界簽章計算使用 | `pwFHCqoQZGmho4w6` |
+| `ECPAY_HASH_IV` | ECPay hash iv | 綠界簽章計算使用 | `EkRm7iFT261dpevs` |
+| `ECPAY_ENV` | 金流環境 | 控制 `staging` / `production` 付款與查詢網址 | `staging` |
 
 注意：
 - `BASE_URL` 會被綠界付款參數組裝使用，作為本機回跳與導流基底
