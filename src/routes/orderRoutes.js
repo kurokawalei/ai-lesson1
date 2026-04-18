@@ -2,6 +2,10 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const authMiddleware = require('../middleware/authMiddleware');
+const {
+  buildCheckoutParams,
+  verifyOrderPayment
+} = require('../utils/ecpay');
 
 const router = express.Router();
 
@@ -311,9 +315,9 @@ router.get('/:id', (req, res) => {
 
 /**
  * @openapi
- * /api/orders/{id}/pay:
- *   patch:
- *     summary: 模擬付款（更新訂單付款狀態）
+ * /api/orders/{id}/ecpay/checkout:
+ *   post:
+ *     summary: 建立綠界付款參數
  *     tags: [Orders]
  *     security:
  *       - bearerAuth: []
@@ -323,20 +327,9 @@ router.get('/:id', (req, res) => {
  *         required: true
  *         schema:
  *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [action]
- *             properties:
- *               action:
- *                 type: string
- *                 enum: [success, fail]
  *     responses:
  *       200:
- *         description: 付款狀態更新成功
+ *         description: 付款表單參數建立成功
  *         content:
  *           application/json:
  *             schema:
@@ -345,32 +338,136 @@ router.get('/:id', (req, res) => {
  *                 data:
  *                   type: object
  *                   properties:
- *                     id:
+ *                     checkoutUrl:
  *                       type: string
- *                     order_no:
+ *                     orderResultUrl:
  *                       type: string
- *                     total_amount:
- *                       type: integer
- *                     status:
+ *                     clientBackUrl:
  *                       type: string
- *                     created_at:
+ *                     returnUrl:
  *                       type: string
- *                     items:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           product_name:
- *                             type: string
- *                           product_price:
- *                             type: integer
- *                           quantity:
- *                             type: integer
+ *                     params:
+ *                       type: object
  *                 error:
  *                   type: string
  *                   nullable: true
  *                 message:
  *                   type: string
+ *       400:
+ *         description: 訂單不存在或狀態不合法
+ */
+router.post('/:id/ecpay/checkout', (req, res) => {
+  const order = db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').get(req.params.id, req.user.userId);
+
+  if (!order) {
+    return res.status(404).json({
+      data: null,
+      error: 'NOT_FOUND',
+      message: '訂單不存在'
+    });
+  }
+
+  if (order.status !== 'pending') {
+    return res.status(400).json({
+      data: null,
+      error: 'INVALID_STATUS',
+      message: '訂單已完成付款，無法重新建立付款單'
+    });
+  }
+
+  const items = db.prepare('SELECT product_name, product_price, quantity FROM order_items WHERE order_id = ?').all(order.id);
+  const checkout = buildCheckoutParams({
+    order,
+    items,
+    baseUrl: process.env.BASE_URL
+  });
+
+  res.json({
+    data: checkout,
+    error: null,
+    message: '付款參數建立成功'
+  });
+});
+
+/**
+ * @openapi
+ * /api/orders/{id}/ecpay/verify:
+ *   post:
+ *     summary: 透過綠界查詢 API 驗證付款結果
+ *     tags: [Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: 驗證完成
+ *       400:
+ *         description: 查詢結果不合法或金額不符
+ *       404:
+ *         description: 訂單不存在
+ */
+router.post('/:id/ecpay/verify', async (req, res) => {
+  try {
+    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').get(req.params.id, req.user.userId);
+
+    if (!order) {
+      return res.status(404).json({
+        data: null,
+        error: 'NOT_FOUND',
+        message: '訂單不存在'
+      });
+    }
+
+    const result = await verifyOrderPayment({ db, orderId: order.id });
+
+    res.json({
+      data: {
+        order: result.order,
+        items: result.items,
+        ecpay: result.query,
+        verified: result.verified
+      },
+      error: null,
+      message: result.message
+    });
+  } catch (error) {
+    const status = error.status || 500;
+    const errorCode = error.message === 'ECPAY_QUERY_TRADE_NO_MISMATCH'
+      ? 'ECPAY_TRADE_NO_MISMATCH'
+      : error.message === 'ECPAY_QUERY_AMOUNT_MISMATCH'
+        ? 'ECPAY_AMOUNT_MISMATCH'
+        : error.message === 'ECPAY_QUERY_CHECKMAC_INVALID'
+          ? 'ECPAY_QUERY_INVALID'
+          : error.message === 'ECPAY_QUERY_EMPTY_RESPONSE'
+            ? 'ECPAY_QUERY_EMPTY'
+            : 'INTERNAL_ERROR';
+
+    res.status(status).json({
+      data: null,
+      error: errorCode,
+      message: status === 500 ? '綠界付款查詢失敗' : error.message
+    });
+  }
+});
+
+/**
+ * @deprecated
+ * @openapi
+ * /api/orders/{id}/pay:
+ *   patch:
+ *     summary: 相容舊版的付款模擬
+ *     tags: [Orders]
+ *     deprecated: true
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: 付款狀態更新成功
  *       400:
  *         description: action 無效或訂單狀態不是 pending
  *       404:

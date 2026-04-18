@@ -28,6 +28,7 @@ app.use(sessionMiddleware);
 
 // API Routes
 app.use('/api/auth', require('./src/routes/authRoutes'));
+app.use('/api/ecpay', require('./src/routes/ecpayRoutes'));
 app.use('/api/admin/products', require('./src/routes/adminProductRoutes'));
 app.use('/api/admin/orders', require('./src/routes/adminOrderRoutes'));
 app.use('/api/products', require('./src/routes/productRoutes'));
